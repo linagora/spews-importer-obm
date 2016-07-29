@@ -1,0 +1,7 @@
+.tscache/
+dist/
+node_modules/
+src/.baseDir.js
+src/.baseDir.js.map
+src/.baseDir.ts
+typings/

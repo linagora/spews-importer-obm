@@ -1,0 +1,10 @@
+{
+  "name": "spews-importer-obm",
+  "dependencies": {
+    "bluebird": "registry:npm/bluebird#3.3.4+20160531224558"
+  },
+  "globalDependencies": {
+    "node": "registry:env/node#6.0.0+20160610031852",
+    "superagent": "registry:dt/superagent#1.4.0+20160724070541"
+  }
+}
