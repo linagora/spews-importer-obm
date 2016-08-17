@@ -1,12 +1,15 @@
 {
   "name": "spews-importer-obm",
   "dependencies": {
-    "bluebird": "registry:npm/bluebird#3.3.4+20160531224558"
+    "bluebird": "registry:npm/bluebird#3.3.4+20160531224558",
+    "sinon": "registry:npm/sinon#1.16.0+20160723033700"
   },
   "globalDependencies": {
     "chai": "registry:dt/chai#3.4.0+20160601211834",
     "mocha": "registry:dt/mocha#2.2.5+20160720003353",
     "node": "registry:env/node#6.0.0+20160610031852",
+    "rx": "registry:dt/rx#0.0.0+20160317120654",
+    "rx-lite": "registry:dt/rx-lite#0.0.0+20160628114230",
     "superagent": "registry:dt/superagent#1.4.0+20160724070541"
   }
 }
