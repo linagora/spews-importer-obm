@@ -9,3 +9,13 @@ export const logger: winston.LoggerInstance = new (winston.Logger)({
         }),
     ],
 });
+
+export const consoleLogger: winston.LoggerInstance = new (winston.Logger)({
+    level: "debug",
+    transports: [
+        new (winston.transports.Console)({
+            json: false,
+            showLevel: false,
+        }),
+    ],
+});

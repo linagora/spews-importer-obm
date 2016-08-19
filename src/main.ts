@@ -1,7 +1,20 @@
-import {ImporterFactory} from "./factories";
+import {AmqpConnectionFactory, ImporterFactory} from "./factories";
+import {consoleLogger} from "./logger";
 import * as program from "commander";
 
 program.version("0.0.1");
+
+program.command("test-amqp-connection")
+    .description("Verify that the tool is able to reach the amqp server")
+    .option("-h, --amqp_host <host>", "The AMQP server address [amqp://localhost]", "amqp://localhost")
+    .action(options => {
+        AmqpConnectionFactory.create(options.amqp_host).subscribe(() => {
+            consoleLogger.warn("amqp connection OK");
+            process.exit();
+        }, (err) => {
+            consoleLogger.warn("Cannot connect to the amqp server => ", err.message);
+        });
+    });
 
 program.command("import <papiUrl> <domainUuid>")
     .description("Listen to the message-queue to import data in an OBM instance")
