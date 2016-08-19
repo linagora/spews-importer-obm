@@ -1,3 +1,5 @@
+import {URL} from "./types";
+
 export class AmqpConnection {
 
     private connectionProvider;
@@ -6,7 +8,7 @@ export class AmqpConnection {
         this.connectionProvider = connectionProvider || require("rx-amqplib");
     }
 
-    public create(host: string) {
+    public create(host: URL) {
         let amqpConnection = this.connectionProvider.newConnection(host);
         process.on("SIGINT", () => amqpConnection.subscribe(conn => {
             console.warn("Closing amqp connection..");
