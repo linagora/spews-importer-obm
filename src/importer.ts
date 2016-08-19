@@ -1,3 +1,4 @@
+import {logger} from "./logger";
 import {EventMessage} from "./models";
 import {PapiClient} from "./papi-client";
 import {URL} from "./types";
@@ -42,14 +43,14 @@ export class Importer {
 
     private runBatchThenAck(runCount: number, events) {
         if (events.length === 0) {
-            console.info("Empty buffer, skipping it");
+            logger.info("Empty buffer, skipping it");
             return;
         }
 
         runCount++;
-        console.info("Cycle %d has %d events", runCount, events.length);
+        logger.info("Cycle %d has %d events", runCount, events.length);
         this.runBatchOnPapi(events)
-            .then(message => console.info(message))
+            .then(message => logger.info(message))
             .then(() => {
                 setTimeout(() => events.forEach(e => e.ack()), this.config.delayBetweenBatchMs);
             });
@@ -58,21 +59,21 @@ export class Importer {
     private messagesToPapiEvents(events): EventMessage[] {
         return events.map(event => {
             let content = JSON.parse(event.content.toString());
-            console.info("Got message %s created at %s", content.Id, content.CreationDate);
+            logger.debug("Got message %s created at %s", content.Id, content.CreationDate);
             return content;
         });
     }
 
     private runBatchOnPapi(events): Promise<string> {
-        console.log("Starting a batch");
+        logger.info("Starting a batch");
         return this.papiClient.startBatch().then(() => {
             return this.papiClient.importAllICS(this.messagesToPapiEvents(events))
                 .then(() => {
-                    console.info("Commiting a batch");
+                    logger.info("Commiting a batch");
                     return this.papiClient.commitBatch();
                 })
                 .then(() => {
-                    console.info("Waiting for batch to finish");
+                    logger.info("Waiting for batch to finish");
                     return this.papiClient.waitForBatchSuccess();
                 });
         });

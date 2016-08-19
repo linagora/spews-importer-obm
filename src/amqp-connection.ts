@@ -1,3 +1,4 @@
+import {logger} from "./logger";
 import {URL} from "./types";
 
 export class AmqpConnection {
@@ -11,7 +12,7 @@ export class AmqpConnection {
     public create(host: URL) {
         let amqpConnection = this.connectionProvider.newConnection(host);
         process.on("SIGINT", () => amqpConnection.subscribe(conn => {
-            console.warn("Closing amqp connection..");
+            logger.warn("Closing amqp connection..");
             conn.close();
             process.exit();
         }));

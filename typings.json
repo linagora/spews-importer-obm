@@ -10,6 +10,7 @@
     "node": "registry:env/node#6.0.0+20160610031852",
     "rx": "registry:dt/rx#0.0.0+20160317120654",
     "rx-lite": "registry:dt/rx-lite#0.0.0+20160628114230",
-    "superagent": "registry:dt/superagent#1.4.0+20160724070541"
+    "superagent": "registry:dt/superagent#1.4.0+20160724070541",
+    "winston": "registry:dt/winston#0.0.0+20160417152829"
   }
 }
