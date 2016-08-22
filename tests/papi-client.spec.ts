@@ -140,15 +140,72 @@ describe("PapiClient", () => {
         it("should resolve the promise when the status is SUCCESS", (done) => {
             expectBatchStart();
             mock.get("http://obm.org/my-domain/batches/123/", () => {
-                return {body: {status: "SUCCESS", operationCount: 5, operationDone: 5}};
+                return {body: {status: "SUCCESS", operationCount: 5, operationDone: 5, operations: []}};
             });
 
             papiClient.startBatch()
                 .then(papiClient.waitForBatchSuccess.bind(papiClient))
                 .then(
-                    (res) => {
-                        expect(res).to.equal("SUCCESS: 5/5");
+                    res => {
+                        expect(res).to.deep.equal({
+                            message: "SUCCESS: 5/5",
+                            errors: [],
+                        });
                         expect(papiClient.currentBatchId).to.be.undefined;
+                        done();
+                    },
+                    done
+                );
+        });
+
+        it("should resolve a successful batch with a message and batch's errors", (done) => {
+            let success = {
+                status: "SUCCESS",
+                entityType: "EVENT",
+                entity: "SUCCESS ICS",
+                operation: "POST",
+                error: null,
+            };
+            let error = {
+                status: "ERROR",
+                entityType: "EVENT",
+                entity: "ERROR ICS",
+                operation: "POST",
+                error: "org.obm.provisioning.exception.ProcessingException",
+            };
+            let errorButNoMessage = {
+                status: "ERROR",
+                entityType: "EVENT",
+                entity: "ERROR ICS",
+                operation: "POST",
+                error: null,
+            };
+            let unknownWithErrorMessage = {
+                status: "unknown status",
+                entityType: "EVENT",
+                entity: "SUCCESS but with error message ICS",
+                operation: "POST",
+                error: "has unknown status but also an error message",
+            };
+
+            expectBatchStart();
+            mock.get("http://obm.org/my-domain/batches/123/", () => {
+                return { body: {
+                    status: "SUCCESS",
+                    operationCount: 5,
+                    operationDone: 3,
+                    operations: [error, success, errorButNoMessage, unknownWithErrorMessage],
+                }};
+            });
+
+            papiClient.startBatch()
+                .then(papiClient.waitForBatchSuccess.bind(papiClient))
+                .then(
+                    res => {
+                        expect(res).to.deep.equal({
+                            message: "SUCCESS: 3/5",
+                            errors: [error, errorButNoMessage, unknownWithErrorMessage],
+                        });
                         done();
                     },
                     done
@@ -162,7 +219,7 @@ describe("PapiClient", () => {
             mock.get("http://obm.org/my-domain/batches/123/", (): any => {
                 queryCount++;
                 if (queryCount === 3) {
-                    return {body: {status: "SUCCESS", operationCount: 5, operationDone: 5}};
+                    return {body: {status: "SUCCESS", operationCount: 5, operationDone: 5, operations: []}};
                 }
                 return {body: {status: "RUNNING"}};
             });

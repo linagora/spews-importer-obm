@@ -53,7 +53,10 @@ describe("Importer", () => {
         papiClient = new PapiClient("http://obm.org/", "my-domain", {login: "admin", password: "pwd"});
         papiClient.startBatch = sinon.stub().returns(Promise.resolve({}));
         papiClient.commitBatch = sinon.stub().returns(Promise.resolve({}));
-        papiClient.waitForBatchSuccess = sinon.stub().returns(Promise.resolve({}));
+        papiClient.waitForBatchSuccess = sinon.stub().returns(Promise.resolve({
+            message: "ok",
+            errors: [],
+        }));
     });
 
     describe("importAllEvents function", () => {
@@ -165,13 +168,16 @@ describe("Importer", () => {
                     done();
                 }, config.delayBetweenBatchMs * 3);
 
-                return Promise.resolve("success");
+                return Promise.resolve({
+                    message: "success",
+                    errors: [],
+                });
             };
 
             new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
         });
 
-        it("should make multiple batches is more event messages than 'maxBatchSize' are available", (done) => {
+        it("should make multiple batches if more event messages than 'maxBatchSize' are available", (done) => {
             config.maxBatchSize = 1;
             config.maxBatchWaitTimeMs = 9999;
             papiClient.importAllICS = () => Promise.resolve([]);
@@ -216,7 +222,10 @@ describe("Importer", () => {
                 expect(importAllICSSpy.called).to.be.true;
                 expect(commitBatchSpy.called).to.be.true;
                 done();
-                return Promise.resolve(undefined);
+                return Promise.resolve({
+                    message: "success",
+                    errors: [],
+                });
             });
 
             config.maxBatchSize = 2;

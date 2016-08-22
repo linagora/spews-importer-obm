@@ -1,6 +1,6 @@
-import {logger} from "./logger";
+import {batchErrorLogger, logger} from "./logger";
 import {EventMessage} from "./models";
-import {PapiClient} from "./papi-client";
+import {BatchResult, PapiClient} from "./papi-client";
 import {URL} from "./types";
 import * as Promise from "bluebird";
 
@@ -50,7 +50,10 @@ export class Importer {
         runCount++;
         logger.info("Cycle %d has %d events", runCount, events.length);
         this.runBatchOnPapi(events)
-            .then(message => logger.info(message))
+            .then(batchResult => {
+                logger.info("Batch %d is done: ", runCount, batchResult.message);
+                batchResult.errors.forEach(e => batchErrorLogger.error("Batch #%d", runCount, e));
+            })
             .then(() => {
                 setTimeout(() => events.forEach(e => e.ack()), this.config.delayBetweenBatchMs);
             });
@@ -64,7 +67,7 @@ export class Importer {
         });
     }
 
-    private runBatchOnPapi(events): Promise<string> {
+    private runBatchOnPapi(events): Promise<BatchResult> {
         logger.info("Starting a batch");
         return this.papiClient.startBatch().then(() => {
             return this.papiClient.importAllICS(this.messagesToPapiEvents(events))
