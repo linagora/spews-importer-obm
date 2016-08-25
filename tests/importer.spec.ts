@@ -30,14 +30,18 @@ describe("Importer", () => {
 
         allEventMessages = [{
             ack: sinon.spy(),
+            nack: sinon.spy(),
             content: {
                 toString: () => '{"Id":"the id1","CreationDate":"a date","PrimaryAddress":"an address","CalendarId":"the calendar","AppointmentId":"an appointment","MimeContent":"the mime"}',
             },
+            properties: { amqpProperties: "message 1 property" },
         }, {
             ack: sinon.spy(),
+            nack: sinon.spy(),
             content: {
                 toString: () => '{"Id":"the id2","CreationDate":"a date","PrimaryAddress":"an address","CalendarId":"the calendar","AppointmentId":"an appointment","MimeContent":"the mime"}',
             },
+            properties: { amqpProperties: "message 2 property" },
         }];
 
         amqpChannel = {
@@ -46,6 +50,7 @@ describe("Importer", () => {
             consume: sinon.stub().returns(Observable.create(observer => {
                 allEventMessages.forEach(eventMessage => observer.onNext(eventMessage));
             })),
+            sendToQueue: sinon.spy(),
         };
         amqpConnection = {createChannel: sinon.stub().returns(Observable.just(amqpChannel))};
         amqpConnectionProvider = Observable.just(amqpConnection);
@@ -177,7 +182,38 @@ describe("Importer", () => {
             new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
         });
 
-        it("should make multiple batches if more event messages than 'maxBatchSize' are available", (done) => {
+        it("should requeue all amqp messages when the batch is finished with at least one error", (done) => {
+            config.maxBatchSize = allEventMessages.length;
+            config.delayBetweenBatchMs = 100;
+            papiClient.importAllICS = () => Promise.resolve([]);
+
+            papiClient.waitForBatchSuccess = () => {
+
+                // Wait more than the 'delayBetweenBatchMs' then assert that acks have been called
+                setTimeout(() => {
+                    allEventMessages.forEach(msg => {
+                        expect(amqpChannel.sendToQueue.calledWith(config.amqp.queues.event, msg.content, msg.properties)).to.be.true;
+                        expect(msg.nack.calledWith(false)).to.be.true;
+                    });
+                    done();
+                }, config.delayBetweenBatchMs * 3);
+
+                return Promise.resolve({
+                    message: "success",
+                    errors: [{
+                        status: "ERROR",
+                        entityType: "EVENT",
+                        entity: "the given ICS",
+                        operation: "POST",
+                        error: "the error message",
+                    }],
+                });
+            };
+
+            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+        });
+
+        it("should make multiple batches is more event messages than 'maxBatchSize' are available", (done) => {
             config.maxBatchSize = 1;
             config.maxBatchWaitTimeMs = 9999;
             papiClient.importAllICS = () => Promise.resolve([]);

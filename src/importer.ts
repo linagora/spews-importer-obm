@@ -30,34 +30,44 @@ export class Importer {
 
     public importAllEvents(): void {
         let runCount = 0;
+        let amqpChannel;
         this.amqpConnectionProvider
             .flatMap(connection => connection.createChannel())
             .flatMap(channel => channel.assertQueue(this.config.amqp.queues.event, { durable: true }))
             .flatMap(reply => {
+                amqpChannel = reply.channel;
                 reply.channel.prefetch(this.config.maxBatchSize);
                 return reply.channel.consume(this.config.amqp.queues.event, { noAck: false });
             })
             .bufferWithTimeOrCount(this.config.maxBatchWaitTimeMs, this.config.maxBatchSize)
-            .subscribe(this.runBatchThenAck.bind(this, runCount));
+            .subscribe(amqpMessages => this.runBatchThenAck(runCount, amqpChannel, amqpMessages));
     }
 
-    private runBatchThenAck(runCount: number, events) {
-        if (events.length === 0) {
+    private runBatchThenAck(runCount: number, amqpChannel, amqpMessages) {
+        if (amqpMessages.length === 0) {
             logger.info("Empty buffer, skipping it");
             return;
         }
 
         runCount++;
-        logger.info("Cycle %d has %d events", runCount, events.length);
-        this.runBatchOnPapi(events)
-            .then(batchResult => {
-                logger.info("Batch %d is done: ", runCount, batchResult.message);
-                batchResult.errors.forEach(e => batchErrorLogger.error("Batch #%d", runCount, e));
-            })
-            .then(() => {
-                setTimeout(() => events.forEach(e => e.ack()), this.config.delayBetweenBatchMs);
-            });
+        logger.info("Batch %d has %d events", runCount, amqpMessages.length);
+        this.runBatchOnPapi(amqpMessages).then(batchResult => {
+            logger.info("Batch %d is done: ", runCount, batchResult.message);
+            batchResult.errors.forEach(e => batchErrorLogger.error("Batch #%d", runCount, e));
+            setTimeout(() => this.ackOrRequeueAllIfAnyError(batchResult, amqpChannel, amqpMessages), this.config.delayBetweenBatchMs);
+        });
     }
+
+    private ackOrRequeueAllIfAnyError(batchResult, amqpChannel, amqpMessages) {
+        // We are not able to know which items are in error so we requeue all.
+        // As the import operations are idempotent, process again well imported item won't have any effect.
+        if (batchResult.errors.length === 0) {
+            amqpMessages.forEach(e => e.ack());
+        } else {
+            amqpMessages.forEach(e => amqpChannel.sendToQueue(this.config.amqp.queues.event, e.content, e.properties));
+            amqpMessages.forEach(e => e.nack(false));
+        }
+    };
 
     private messagesToPapiEvents(events): EventMessage[] {
         return events.map(event => {
