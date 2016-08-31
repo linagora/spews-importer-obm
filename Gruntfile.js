@@ -9,7 +9,10 @@ module.exports = function(grunt) {
         reporter: 'spec',
         compilers: ['ts:ts-node/register']
       },
-      all: ['./tests/**/*.spec.ts']
+      all: [
+        './tests/global.ts',
+        './tests/**/*.spec.ts'
+      ]
     },
     ts: {
       default : {
