@@ -5,6 +5,7 @@
   "main": "Gruntfile.js",
   "dependencies": {
     "bluebird": "^3.4.1",
+    "commander": "^2.9.0",
     "rx-amqplib": "^0.1.2",
     "superagent": "^2.1.0",
     "winston": "^2.2.0"
