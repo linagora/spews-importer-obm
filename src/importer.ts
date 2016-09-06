@@ -1,11 +1,13 @@
 import {batchErrorLogger, logger} from "./logger";
-import {EventMessage} from "./models";
+import {ImportingEntity, ImportMethod} from "./models";
 import {BatchResult, PapiClient} from "./papi-client";
 import {URL} from "./types";
 import * as Promise from "bluebird";
+import {Observable} from "rx";
 
 export interface AmqpQueues {
     event: string;
+    contact: string;
 }
 
 export interface AmqpConfig {
@@ -22,65 +24,75 @@ export interface ImporterConfig {
 
 export class Importer {
 
+    private batchNumber: number = 0;
+
     constructor(
         private papiClient: PapiClient,
         private config: ImporterConfig,
         private amqpConnectionProvider
     ) {}
 
-    public importAllEvents(): void {
-        let runCount = 0;
-        let amqpChannel;
+    public importAll(): void {
         this.amqpConnectionProvider
             .flatMap(connection => connection.createChannel())
-            .flatMap(channel => channel.assertQueue(this.config.amqp.queues.event, { durable: true }))
+            .flatMap(channel => Observable.merge(
+                channel.assertQueue(this.config.amqp.queues.event, { durable: true }),
+                channel.assertQueue(this.config.amqp.queues.contact, { durable: true })
+            ).takeLast(1))
             .flatMap(reply => {
-                amqpChannel = reply.channel;
-                reply.channel.prefetch(this.config.maxBatchSize);
-                return reply.channel.consume(this.config.amqp.queues.event, { noAck: false });
+                reply.channel.prefetch(this.config.maxBatchSize, true);
+                return Observable.merge(
+                    this.buildEventConsumer(reply.channel),
+                    this.buildContactConsumer(reply.channel)
+                );
             })
             .bufferWithTimeOrCount(this.config.maxBatchWaitTimeMs, this.config.maxBatchSize)
-            .subscribe(amqpMessages => this.runBatchThenAck(runCount, amqpChannel, amqpMessages));
+            .subscribe(entities => this.importInOBM(entities));
     }
 
-    private runBatchThenAck(runCount: number, amqpChannel, amqpMessages) {
-        if (amqpMessages.length === 0) {
+    private buildEventConsumer(amqpChannel): Observable<ImportingEntity> {
+        return this.buildConsumer(amqpChannel, this.config.amqp.queues.event, this.papiClient.importICS.bind(this.papiClient));
+    }
+
+    private buildContactConsumer(amqpChannel): Observable<ImportingEntity> {
+        return this.buildConsumer(amqpChannel, this.config.amqp.queues.contact, this.papiClient.importVCF.bind(this.papiClient));
+    }
+
+    private buildConsumer(amqpChannel, queue: string, importMethod: ImportMethod): Observable<ImportingEntity> {
+        return amqpChannel
+            .consume(queue, { noAck: false })
+            .map(msg => new ImportingEntity(importMethod, queue, amqpChannel, msg));
+    }
+
+    private importInOBM(entities: ImportingEntity[]) {
+        if (entities.length === 0) {
             logger.info("Empty buffer, skipping it");
             return;
         }
 
-        runCount++;
-        logger.info("Batch %d has %d events", runCount, amqpMessages.length);
-        this.runBatchOnPapi(amqpMessages).then(batchResult => {
-            logger.info("Batch %d is done: ", runCount, batchResult.message);
-            batchResult.errors.forEach(e => batchErrorLogger.error("Batch #%d", runCount, e));
-            setTimeout(() => this.ackOrRequeueAllIfAnyError(batchResult, amqpChannel, amqpMessages), this.config.delayBetweenBatchMs);
+        this.batchNumber++;
+        logger.info("Batch %d has %d messages", this.batchNumber, entities.length);
+        this.runBatchOnPapi(entities).then(batchResult => {
+            logger.info("Batch %d is done: ", this.batchNumber, batchResult.message);
+            batchResult.errors.forEach(e => batchErrorLogger.error("Batch #%d", this.batchNumber, e));
+            setTimeout(() => this.notifyEntityStateDependingOnBatchStatus(batchResult, entities), this.config.delayBetweenBatchMs);
         });
     }
 
-    private ackOrRequeueAllIfAnyError(batchResult, amqpChannel, amqpMessages) {
-        // We are not able to know which items are in error so we requeue all.
+    private notifyEntityStateDependingOnBatchStatus(batchResult, entities: ImportingEntity[]) {
+        // We are not able to know which entities are in error so we mark all as failed if required.
         // As the import operations are idempotent, process again well imported item won't have any effect.
         if (batchResult.errors.length === 0) {
-            amqpMessages.forEach(e => e.ack());
+            entities.forEach(e => e.importHasSucceed());
         } else {
-            amqpMessages.forEach(e => amqpChannel.sendToQueue(this.config.amqp.queues.event, e.content, e.properties));
-            amqpMessages.forEach(e => e.nack(false));
+            entities.forEach(e => e.importHasFailed());
         }
-    };
-
-    private messagesToPapiEvents(events): EventMessage[] {
-        return events.map(event => {
-            let content = JSON.parse(event.content.toString());
-            logger.debug("Got message %s created at %s", content.Id, content.CreationDate);
-            return content;
-        });
     }
 
-    private runBatchOnPapi(events): Promise<BatchResult> {
+    private runBatchOnPapi(entities: ImportingEntity[]): Promise<BatchResult> {
         logger.info("Starting a batch");
         return this.papiClient.startBatch().then(() => {
-            return this.papiClient.importAllICS(this.messagesToPapiEvents(events))
+            return Promise.all(entities.map(e => e.import()))
                 .then(() => {
                     logger.info("Commiting a batch");
                     return this.papiClient.commitBatch();

@@ -1,6 +1,5 @@
-import {EventMessage} from "../src/models";
+import {ContactMessage, EventMessage} from "../src/models";
 import {PapiClient} from "../src/papi-client";
-import * as Promise from "bluebird";
 import {expect} from "chai";
 import superagent = require("superagent");
 
@@ -21,6 +20,18 @@ function generateEvent(id?: number): EventMessage {
         CalendarId: "calendarId" + id,
         AppointmentId: "appointmentId" + id,
         MimeContent: "ICS data" + id,
+    };
+}
+
+function generateContact(id?: number): ContactMessage {
+    id = id || 1;
+    return {
+        Id: "the id " + id,
+        CreationDate: "2016-07-02T15:11:04",
+        PrimaryAddress: "user@obm.org",
+        AddressBookId: "AddressbookId" + id,
+        OriginalContactId: "OriginalContactId" + id,
+        MimeContent: "VCF data" + id,
     };
 }
 
@@ -266,21 +277,31 @@ describe("PapiClient", () => {
 
     });
 
-    describe("importAllICS function", () => {
+    describe("importVCF function", () => {
 
-        let events: EventMessage[] = [generateEvent(1), generateEvent(2)];
+        it("should refuse to execute when no batch is started", () => {
+            expect(() => papiClient.importVCF(generateContact())).to.throw(Error, "No batch has been started");
+        });
 
-        it("should delegate to importICS", () => {
-            let importCount = 0;
-            papiClient.importICS = (event: EventMessage) => new Promise<superagent.Response>((resolve) => {
-                importCount++;
-                resolve(undefined);
+        it("should set the authorization header", (done) => {
+            expectBatchStart();
+            mock.post("http://obm.org/my-domain/batches/123/contacts/user@obm.org", (req) => {
+                expect(req.headers.authorization).to.equal("Basic YWRtaW46cHdk");
+                done();
             });
 
-            papiClient.importAllICS(events).then((responses) => {
-                expect(importCount).to.equal(events.length);
-                expect(responses.length).to.equal(events.length);
+            papiClient.startBatch().then(papiClient.importVCF.bind(papiClient, generateContact()));
+        });
+
+        it("should set the VCF data in the body and the text/plain header", (done) => {
+            expectBatchStart();
+            mock.post("http://obm.org/my-domain/batches/123/contacts/user@obm.org", (req) => {
+                expect(req.headers["content-type"]).to.equal("text/plain");
+                // expect(req.body).to.equal("content"); // superagent-mocker finds an empty body
+                done();
             });
+
+            papiClient.startBatch().then(papiClient.importVCF.bind(papiClient, generateContact()));
         });
 
     });
