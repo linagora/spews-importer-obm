@@ -1,5 +1,5 @@
 import {Importer, ImporterConfig} from "../src/importer";
-import {PapiClient} from "../src/papi-client";
+import {BatchOperationStatus, BatchOperationType, BatchOperationVerb, PapiClient} from "../src/papi-client";
 import * as Promise from "bluebird";
 import {expect} from "chai";
 import {Observable} from "rx";
@@ -201,10 +201,10 @@ describe("Importer", () => {
                 return Promise.resolve({
                     message: "success",
                     errors: [{
-                        status: "ERROR",
-                        entityType: "EVENT",
+                        status: BatchOperationStatus.ERROR,
+                        entityType: BatchOperationType.EVENT,
                         entity: "the given ICS",
-                        operation: "POST",
+                        operation: BatchOperationVerb.POST,
                         error: "the error message",
                     }],
                 });

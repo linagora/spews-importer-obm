@@ -11,16 +11,20 @@ export interface PapiCredentials {
     password: string;
 }
 
+export enum BatchOperationStatus {ERROR, SUCCESS, IDLE, RUNNING}
+export enum BatchOperationType {GROUP, USER, GROUP_MEMBERSHIP, USER_MEMBERSHIP, EVENT, CONTACT}
+export enum BatchOperationVerb {GET, POST, PUT, DELETE, PATCH}
+
 export interface BatchResult {
     message: string;
     errors: BatchError[];
 }
 
 export interface BatchError {
-    status: string;
-    entityType: string;
+    status: BatchOperationStatus;
+    entityType: BatchOperationType;
     entity: string;
-    operation: string;
+    operation: BatchOperationVerb;
     error: string;
 }
 
@@ -60,9 +64,9 @@ export class PapiClient {
         let callback = (err, res) => {
             if (err) {
                 deferred.reject(err);
-            } else if (res.body.status === "ERROR") {
+            } else if (res.body.status === BatchOperationStatus[BatchOperationStatus.ERROR]) {
                 deferred.reject("ERROR: " + res.body.operationDone + "/" + res.body.operationCount);
-            } else if (res.body.status === "SUCCESS") {
+            } else if (res.body.status === BatchOperationStatus[BatchOperationStatus.SUCCESS]) {
                 this.currentBatchId = undefined;
                 deferred.resolve({
                     message: "SUCCESS: " + res.body.operationDone + "/" + res.body.operationCount,
@@ -92,7 +96,7 @@ export class PapiClient {
     }
 
     private findBatchErrors(batch): BatchError[] {
-        return batch.operations.filter(o => o.status === "ERROR" || o.error);
+        return batch.operations.filter(o => o.error || o.status === BatchOperationStatus[BatchOperationStatus.ERROR]);
     }
 
     private promisify(request: SuperAgentRequest): Promise<Response> {
