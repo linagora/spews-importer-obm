@@ -10,6 +10,17 @@ export const logger: winston.LoggerInstance = new (winston.Logger)({
     ],
 });
 
+export const batchErrorLogger: winston.LoggerInstance = new (winston.Logger)({
+    level: "info",
+    transports: [
+        new (winston.transports.File)({
+            filename: "log/errors.log",
+            json: true,
+            showLevel: false,
+        }),
+    ],
+});
+
 export const consoleLogger: winston.LoggerInstance = new (winston.Logger)({
     level: "debug",
     transports: [

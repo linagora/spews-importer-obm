@@ -10,6 +10,24 @@ export interface PapiCredentials {
     login: string;
     password: string;
 }
+
+export enum BatchOperationStatus {ERROR, SUCCESS, IDLE, RUNNING}
+export enum BatchOperationType {GROUP, USER, GROUP_MEMBERSHIP, USER_MEMBERSHIP, EVENT, CONTACT}
+export enum BatchOperationVerb {GET, POST, PUT, DELETE, PATCH}
+
+export interface BatchResult {
+    message: string;
+    errors: BatchError[];
+}
+
+export interface BatchError {
+    status: BatchOperationStatus;
+    entityType: BatchOperationType;
+    entity: string;
+    operation: BatchOperationVerb;
+    error: string;
+}
+
 const DEFAUT_DELAY_MS = 1000;
 
 export class PapiClient {
@@ -39,18 +57,21 @@ export class PapiClient {
         return this.promisify(this.requestInBatch(put, "/"));
     }
 
-    public waitForBatchSuccess(delay?: number): Promise<string> {
+    public waitForBatchSuccess(delay?: number): Promise<BatchResult> {
         this.assertBatchHasBeenStarted();
 
-        let deferred = Promise.defer<string>();
+        let deferred = Promise.defer<BatchResult>();
         let callback = (err, res) => {
             if (err) {
                 deferred.reject(err);
-            } else if (res.body.status === "ERROR") {
+            } else if (res.body.status === BatchOperationStatus[BatchOperationStatus.ERROR]) {
                 deferred.reject("ERROR: " + res.body.operationDone + "/" + res.body.operationCount);
-            } else if (res.body.status === "SUCCESS") {
+            } else if (res.body.status === BatchOperationStatus[BatchOperationStatus.SUCCESS]) {
                 this.currentBatchId = undefined;
-                deferred.resolve("SUCCESS: " + res.body.operationDone + "/" + res.body.operationCount);
+                deferred.resolve({
+                    message: "SUCCESS: " + res.body.operationDone + "/" + res.body.operationCount,
+                    errors: this.findBatchErrors(res.body),
+                });
             } else {
                 setTimeout(lookForStatus, delay || DEFAUT_DELAY_MS);
             }
@@ -72,6 +93,10 @@ export class PapiClient {
 
     public importAllICS(events: EventMessage[]): Promise<Response[]> {
         return Promise.all(events.map(e => this.importICS(e)));
+    }
+
+    private findBatchErrors(batch): BatchError[] {
+        return batch.operations.filter(o => o.error || o.status === BatchOperationStatus[BatchOperationStatus.ERROR]);
     }
 
     private promisify(request: SuperAgentRequest): Promise<Response> {
