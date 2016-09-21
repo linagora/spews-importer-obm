@@ -1,12 +1,26 @@
 import {Importer, ImporterConfig} from "./importer";
 import {logger} from "./logger";
-import {PapiClient} from "./papi-client";
+import {BatchOperationType, PapiClient} from "./papi-client";
 import {URL, UUID} from "./types";
 
 export class ImporterFactory {
 
     public static create(papiUrl: URL, domainUuid: UUID, options): Importer {
-        let config: ImporterConfig = {
+        let config = ImporterConfigFactory.create(options);
+        let amqpConnection = AmqpConnectionFactory.create(config.amqp.host);
+        let papiClient = new PapiClient(papiUrl, domainUuid, {
+            login: options.papi_user,
+            password: options.papi_pwd,
+        });
+
+        return new Importer(papiClient, config, amqpConnection);
+    }
+}
+
+export class ImporterConfigFactory {
+
+    public static create(options): ImporterConfig {
+        return {
             maxBatchSize: options.batch_size,
             maxBatchWaitTimeMs: options.batch_wait,
             delayBetweenBatchMs: options.batch_delay,
@@ -17,16 +31,21 @@ export class ImporterFactory {
                     contact: "contacts",
                 },
             },
+            onlyType: this.validOnlyTypeOrError(options),
         };
+    }
 
-        let amqpConnection = AmqpConnectionFactory.create(config.amqp.host);
+    private static validOnlyTypeOrError(options): BatchOperationType {
+        if (!options.only_type) {
+            return undefined;
+        }
 
-        let papiClient = new PapiClient(papiUrl, domainUuid, {
-            login: options.papi_user,
-            password: options.papi_pwd,
-        });
+        let typeAsEnum = BatchOperationType[String(options.only_type)];
 
-        return new Importer(papiClient, config, amqpConnection);
+        if (typeAsEnum) {
+            return typeAsEnum;
+        }
+        throw new Error("Illegal only_type option value: " + options.only_type);
     }
 }
 

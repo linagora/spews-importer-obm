@@ -117,6 +117,15 @@ describe("Importer", () => {
             expect(amqpChannel.consume.withArgs(config.amqp.queues.contact, { noAck: false }).calledOnce).to.be.true;
         });
 
+        it("should start a channel consumer on the only queue related to the config's 'onlyType'", () => {
+            config.onlyType = BatchOperationType.CONTACT;
+
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
+
+            expect(amqpChannel.consume.withArgs(config.amqp.queues.event, { noAck: false }).called).to.be.false;
+            expect(amqpChannel.consume.withArgs(config.amqp.queues.contact, { noAck: false }).calledOnce).to.be.true;
+        });
+
         it("should transform the amqp messages format then call expected papiClient methods", (done) => {
             config.maxBatchWaitTimeMs = 100;
 
