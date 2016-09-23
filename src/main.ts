@@ -25,7 +25,7 @@ program.command("import <papiUrl> <domainUuid>")
     .option("-w, --batch_wait <wait>", "Time to wait (in ms) for new message from the message-queue before making a batch [5000]", 5000)
     .option("-d, --batch_delay <delay>", "Minimal time (in ms) to wait between two batches, can be used to avoid PAPI overload [1000]", 1000)
     .action((papiUrl, domainUuid, options) => {
-        ImporterFactory.create(papiUrl, domainUuid, options).importAllEvents();
+        ImporterFactory.create(papiUrl, domainUuid, options).importAll();
     });
 
 function outputHelpIfNoCommand() {

@@ -9,11 +9,35 @@ describe("Importer", () => {
 
     let config: ImporterConfig;
     let papiClient: PapiClient;
+    let importICSSpy;
+    let importVCFSpy;
 
     let allEventMessages;
+    let allContactMessages;
     let amqpConnectionProvider;
     let amqpConnection;
     let amqpChannel;
+
+    function buildAmqpMessage(id) {
+        return {
+            ack: sinon.spy(),
+            nack: sinon.spy(),
+            content: {},
+            properties: { amqpProperties: `message ${id} property` },
+        };
+    }
+
+    function buildEventMessage(id) {
+        let message = buildAmqpMessage(id);
+        message.content.toString = () => `{"Id":"the id ${id}","CreationDate":"a date","PrimaryAddress":"an address","CalendarId":"the calendar","AppointmentId":"an appointment","MimeContent":"the mime"}`;
+        return message;
+    }
+
+    function buildContactMessage(id) {
+        let message = buildAmqpMessage(id);
+        message.content.toString = () => `{"Id":"the id ${id}","CreationDate":"a date","PrimaryAddress":"an address","AddressBookId":"the book","OriginalContactId":"a contact","MimeContent":"the mime"}`;
+        return message;
+    }
 
     beforeEach(() => {
         config = {
@@ -23,32 +47,24 @@ describe("Importer", () => {
             amqp: {
                 host: "amqp://localhost",
                 queues: {
-                    event: "MIMEImporter",
+                    event: "event_queue",
+                    contact: "contact_queue",
                 },
             },
         };
 
-        allEventMessages = [{
-            ack: sinon.spy(),
-            nack: sinon.spy(),
-            content: {
-                toString: () => '{"Id":"the id1","CreationDate":"a date","PrimaryAddress":"an address","CalendarId":"the calendar","AppointmentId":"an appointment","MimeContent":"the mime"}',
-            },
-            properties: { amqpProperties: "message 1 property" },
-        }, {
-            ack: sinon.spy(),
-            nack: sinon.spy(),
-            content: {
-                toString: () => '{"Id":"the id2","CreationDate":"a date","PrimaryAddress":"an address","CalendarId":"the calendar","AppointmentId":"an appointment","MimeContent":"the mime"}',
-            },
-            properties: { amqpProperties: "message 2 property" },
-        }];
+        allEventMessages = [buildEventMessage(1), buildEventMessage(2)];
+        allContactMessages = [];
 
         amqpChannel = {
             assertQueue: sinon.spy(() => Observable.just({channel: amqpChannel})),
             prefetch: sinon.spy(),
-            consume: sinon.stub().returns(Observable.create(observer => {
-                allEventMessages.forEach(eventMessage => observer.onNext(eventMessage));
+            consume: sinon.spy(queueName => Observable.create(observer => {
+                if (queueName === config.amqp.queues.event) {
+                    allEventMessages.forEach(msg => observer.onNext(msg));
+                } else if (queueName === config.amqp.queues.contact) {
+                    allContactMessages.forEach(msg => observer.onNext(msg));
+                }
             })),
             sendToQueue: sinon.spy(),
         };
@@ -62,14 +78,16 @@ describe("Importer", () => {
             message: "ok",
             errors: [],
         }));
+        papiClient.importICS = importICSSpy = sinon.stub().returns(Promise.resolve(null));
+        papiClient.importVCF = importVCFSpy = sinon.stub().returns(Promise.resolve(null));
     });
 
-    describe("importAllEvents function", () => {
+    describe("importAll function", () => {
 
         it("should create a channel from the amqp connection", () => {
             allEventMessages = [];
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
 
             expect(amqpConnection.createChannel.called).to.be.true;
         });
@@ -77,7 +95,7 @@ describe("Importer", () => {
         it("should create the queue from the amqp channel with expected options", () => {
             allEventMessages = [];
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
 
             expect(amqpChannel.assertQueue.calledWithExactly(config.amqp.queues.event, { durable: true })).to.be.true;
         });
@@ -85,43 +103,58 @@ describe("Importer", () => {
         it("should configure the channel's prefetch to 'maxBatchSize'", () => {
             allEventMessages = [];
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
 
-            expect(amqpChannel.prefetch.calledWithExactly(config.maxBatchSize)).to.be.true;
+            expect(amqpChannel.prefetch.calledWithExactly(config.maxBatchSize, true)).to.be.true;
         });
 
-        it("should start a channel consumer with expected options", () => {
+        it("should start a channel consumer with expected options only once", () => {
             allEventMessages = [];
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
 
-            expect(amqpChannel.consume.calledWithExactly(config.amqp.queues.event, { noAck: false })).to.be.true;
+            expect(amqpChannel.consume.withArgs(config.amqp.queues.event, { noAck: false }).calledOnce).to.be.true;
+            expect(amqpChannel.consume.withArgs(config.amqp.queues.contact, { noAck: false }).calledOnce).to.be.true;
         });
 
-        it("should transform the amqp messages to the expected format", (done) => {
+        it("should transform the amqp messages format then call expected papiClient methods", (done) => {
             config.maxBatchWaitTimeMs = 100;
 
-            papiClient.importAllICS = (events) => {
-                expect(events).to.deep.equal([{
-                    Id: "the id1",
-                    CreationDate: "a date",
-                    PrimaryAddress: "an address",
-                    CalendarId: "the calendar",
-                    AppointmentId: "an appointment",
-                    MimeContent: "the mime",
-                }, {
-                    Id: "the id2",
-                    CreationDate: "a date",
-                    PrimaryAddress: "an address",
-                    CalendarId: "the calendar",
-                    AppointmentId: "an appointment",
-                    MimeContent: "the mime",
-                }]);
-                done();
-                return Promise.resolve([]);
+            allContactMessages = [buildContactMessage(3)];
+            let expectedEvent1 = {
+                Id: "the id 1",
+                CreationDate: "a date",
+                PrimaryAddress: "an address",
+                CalendarId: "the calendar",
+                AppointmentId: "an appointment",
+                MimeContent: "the mime",
+            };
+            let expectedEvent2 = {
+                Id: "the id 2",
+                CreationDate: "a date",
+                PrimaryAddress: "an address",
+                CalendarId: "the calendar",
+                AppointmentId: "an appointment",
+                MimeContent: "the mime",
+            };
+            let expectedContact = {
+                Id: "the id 3",
+                CreationDate: "a date",
+                PrimaryAddress: "an address",
+                AddressBookId: "the book",
+                OriginalContactId: "a contact",
+                MimeContent: "the mime",
             };
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            papiClient.commitBatch = () => {
+                expect(importICSSpy.withArgs(expectedEvent1).calledOnce).to.be.true;
+                expect(importICSSpy.withArgs(expectedEvent2).calledOnce).to.be.true;
+                expect(importVCFSpy.withArgs(expectedContact).calledOnce).to.be.true;
+                done();
+                return Promise.resolve(null);
+            };
+
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
         });
 
         it("should not start any batch on papi if no amqp event message is received", (done) => {
@@ -129,7 +162,7 @@ describe("Importer", () => {
             allEventMessages = [];
             papiClient.startBatch = () => done("Should not be called");
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
 
             setTimeout(done, config.maxBatchWaitTimeMs + 200);
         });
@@ -138,32 +171,31 @@ describe("Importer", () => {
             config.maxBatchSize = allEventMessages.length + 1000;
             config.maxBatchWaitTimeMs = 100;
 
-            papiClient.importAllICS = (events) => {
-                expect(events.length).to.equal(allEventMessages.length);
+            papiClient.commitBatch = () => {
+                expect(importICSSpy.callCount).to.equal(allEventMessages.length);
                 done();
-                return Promise.resolve([]);
+                return Promise.resolve(null);
             };
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
         });
 
         it("should start a batch as soon as 'maxBatchSize' event messages are received", (done) => {
             config.maxBatchSize = allEventMessages.length;
             config.maxBatchWaitTimeMs = 9999;
 
-            papiClient.importAllICS = (events) => {
-                expect(events.length).to.equal(config.maxBatchSize);
+            papiClient.commitBatch = () => {
+                expect(importICSSpy.callCount).to.equal(allEventMessages.length);
                 done();
-                return Promise.resolve([]);
+                return Promise.resolve(null);
             };
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
         });
 
         it("should ack all amqp event messages when the batch is finished and has waited the 'delayBetweenBatchMs'", (done) => {
             config.maxBatchSize = allEventMessages.length;
             config.delayBetweenBatchMs = 100;
-            papiClient.importAllICS = () => Promise.resolve([]);
 
             papiClient.waitForBatchSuccess = () => {
 
@@ -179,13 +211,12 @@ describe("Importer", () => {
                 });
             };
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
         });
 
         it("should requeue all amqp messages when the batch is finished with at least one error", (done) => {
             config.maxBatchSize = allEventMessages.length;
             config.delayBetweenBatchMs = 100;
-            papiClient.importAllICS = () => Promise.resolve([]);
 
             papiClient.waitForBatchSuccess = () => {
 
@@ -210,13 +241,12 @@ describe("Importer", () => {
                 });
             };
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
         });
 
         it("should make multiple batches is more event messages than 'maxBatchSize' are available", (done) => {
             config.maxBatchSize = 1;
             config.maxBatchWaitTimeMs = 9999;
-            papiClient.importAllICS = () => Promise.resolve([]);
 
             let batchCount = 0;
             papiClient.commitBatch = () => {
@@ -227,19 +257,19 @@ describe("Importer", () => {
                 return Promise.resolve(undefined);
             };
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
         });
 
         it("should execute papi calls in the expected order", (done) => {
 
             let startBatchSpy = sinon.spy(() => {
-                expect(importAllICSSpy.called).to.be.false;
+                expect(importSpy.called).to.be.false;
                 expect(commitBatchSpy.called).to.be.false;
                 expect(waitForBatchSuccessSpy.called).to.be.false;
                 return Promise.resolve(undefined);
             });
 
-            let importAllICSSpy = sinon.spy(() => {
+            let importSpy = sinon.spy(() => {
                 expect(startBatchSpy.called).to.be.true;
                 expect(commitBatchSpy.called).to.be.false;
                 expect(waitForBatchSuccessSpy.called).to.be.false;
@@ -248,14 +278,14 @@ describe("Importer", () => {
 
             let commitBatchSpy = sinon.spy(() => {
                 expect(startBatchSpy.called).to.be.true;
-                expect(importAllICSSpy.called).to.be.true;
+                expect(importSpy.called).to.be.true;
                 expect(waitForBatchSuccessSpy.called).to.be.false;
                 return Promise.resolve(undefined);
             });
 
             let waitForBatchSuccessSpy = sinon.spy(() => {
                 expect(startBatchSpy.called).to.be.true;
-                expect(importAllICSSpy.called).to.be.true;
+                expect(importSpy.called).to.be.true;
                 expect(commitBatchSpy.called).to.be.true;
                 done();
                 return Promise.resolve({
@@ -266,11 +296,11 @@ describe("Importer", () => {
 
             config.maxBatchSize = 2;
             papiClient.startBatch = startBatchSpy;
-            papiClient.importAllICS = importAllICSSpy;
+            papiClient.importICS = importSpy;
             papiClient.commitBatch = commitBatchSpy;
             papiClient.waitForBatchSuccess = waitForBatchSuccessSpy;
 
-            new Importer(papiClient, config, amqpConnectionProvider).importAllEvents();
+            new Importer(papiClient, config, amqpConnectionProvider).importAll();
         });
 
     });

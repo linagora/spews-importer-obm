@@ -1,4 +1,4 @@
-import {EventMessage} from "./models";
+import {ContactMessage, EventMessage} from "./models";
 import {URL, UUID} from "./types";
 import * as Promise from "bluebird";
 import {get, post, put, Response, SuperAgentRequest} from "superagent";
@@ -91,8 +91,14 @@ export class PapiClient {
         );
     }
 
-    public importAllICS(events: EventMessage[]): Promise<Response[]> {
-        return Promise.all(events.map(e => this.importICS(e)));
+    public importVCF(contact: ContactMessage): Promise<Response> {
+        this.assertBatchHasBeenStarted();
+
+        return this.promisify(this.requestInBatch(post, "/contacts/" + contact.PrimaryAddress)
+            .query({ trackingRef: contact.Id, trackingDate: contact.CreationDate })
+            .type("text/plain")
+            .send(contact.MimeContent)
+        );
     }
 
     private findBatchErrors(batch): BatchError[] {

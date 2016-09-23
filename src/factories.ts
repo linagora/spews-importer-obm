@@ -14,6 +14,7 @@ export class ImporterFactory {
                 host: options.amqp_host,
                 queues: {
                     event: "events",
+                    contact: "contacts",
                 },
             },
         };
