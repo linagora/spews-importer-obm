@@ -44,6 +44,7 @@ describe("Importer", () => {
             maxBatchSize: 5,
             maxBatchWaitTimeMs: 5000,
             delayBetweenBatchMs: 1000,
+            checkBatchStatusInterval: 1000,
             amqp: {
                 host: "amqp://localhost",
                 queues: {

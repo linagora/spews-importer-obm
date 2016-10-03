@@ -48,6 +48,7 @@ describe("The factories module", () => {
                     batch_size: 28,
                     batch_wait: 32,
                     batch_delay: 35,
+                    batch_check_interval: 45,
                     amqp_host: "the host",
                     only_type: "EVENT",
                 });
@@ -55,6 +56,7 @@ describe("The factories module", () => {
                     maxBatchSize: 28,
                     maxBatchWaitTimeMs: 32,
                     delayBetweenBatchMs: 35,
+                    checkBatchStatusInterval: 45,
                     amqp: {
                         host: "the host",
                         queues: {
