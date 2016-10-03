@@ -62,6 +62,7 @@ describe("The factories module", () => {
                         queues: {
                             event: "events",
                             contact: "contacts",
+                            addressbook: "addressbooks",
                         },
                     },
                     onlyType: BatchOperationType.EVENT,

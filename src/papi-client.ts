@@ -1,4 +1,4 @@
-import {ContactMessage, EventMessage} from "./models";
+import {AddressBookMessage, ContactMessage, EventMessage} from "./models";
 import {URL, UUID} from "./types";
 import * as Promise from "bluebird";
 import {get, post, put, Response, SuperAgentRequest} from "superagent";
@@ -12,7 +12,7 @@ export interface PapiCredentials {
 }
 
 export enum BatchOperationStatus {ERROR, SUCCESS, IDLE, RUNNING}
-export enum BatchOperationType {GROUP, USER, GROUP_MEMBERSHIP, USER_MEMBERSHIP, EVENT, CONTACT}
+export enum BatchOperationType {GROUP, USER, GROUP_MEMBERSHIP, USER_MEMBERSHIP, EVENT, CONTACT, ADDRESS_BOOK}
 export enum BatchOperationVerb {GET, POST, PUT, DELETE, PATCH}
 
 export interface BatchResult {
@@ -31,6 +31,8 @@ export interface BatchError {
 const DEFAUT_DELAY_MS = 1000;
 
 export class PapiClient {
+
+    private static ORIGIN = "spews";
 
     public currentBatchId: BatchId;
 
@@ -98,6 +100,21 @@ export class PapiClient {
             .query({ trackingRef: contact.Id, trackingDate: contact.CreationDate })
             .type("text/plain")
             .send(contact.MimeContent)
+        );
+    }
+
+    public createAddressBook(book: AddressBookMessage): Promise<Response> {
+        this.assertBatchHasBeenStarted();
+
+        return this.promisify(this.requestInBatch(post, "/addressbooks/" + book.PrimaryAddress)
+            .send({
+                name: book.DisplayName,
+                role: book.AddressBookType,
+                reference: {
+                    value: book.AddressBookId,
+                    origin: PapiClient.ORIGIN,
+                },
+            })
         );
     }
 

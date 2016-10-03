@@ -30,6 +30,7 @@ export class ImporterConfigFactory {
                 queues: {
                     event: "events",
                     contact: "contacts",
+                    addressbook: "addressbooks",
                 },
             },
             onlyType: this.validOnlyTypeOrError(options),

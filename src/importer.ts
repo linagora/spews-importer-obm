@@ -8,6 +8,7 @@ import {Observable} from "rx";
 export interface AmqpQueues {
     event: string;
     contact: string;
+    addressbook: string;
 }
 
 export interface AmqpConfig {
@@ -39,7 +40,8 @@ export class Importer {
             .flatMap(connection => connection.createChannel())
             .flatMap(channel => Observable.merge(
                 channel.assertQueue(this.config.amqp.queues.event, { durable: true }),
-                channel.assertQueue(this.config.amqp.queues.contact, { durable: true })
+                channel.assertQueue(this.config.amqp.queues.contact, { durable: true }),
+                channel.assertQueue(this.config.amqp.queues.addressbook, { durable: true })
             ).takeLast(1))
             .flatMap(reply => {
                 reply.channel.prefetch(this.config.maxBatchSize, true);
@@ -52,7 +54,11 @@ export class Importer {
     private buildConsumers(amqpChannel): Observable<ImportingEntity>[] {
         if (!this.config.onlyType) {
             logger.info("The import will consume messages of all entity types");
-            return [this.buildEventConsumer(amqpChannel), this.buildContactConsumer(amqpChannel)];
+            return [
+                this.buildEventConsumer(amqpChannel),
+                this.buildContactConsumer(amqpChannel),
+                this.buildAddressBookConsumer(amqpChannel),
+            ];
         }
 
         switch (this.config.onlyType) {
@@ -62,6 +68,9 @@ export class Importer {
             case BatchOperationType.CONTACT:
                 logger.info("The import will consume messages of CONTACT type only");
                 return [this.buildContactConsumer(amqpChannel)];
+            case BatchOperationType.ADDRESS_BOOK:
+                logger.info("The import will consume messages of ADDRESS_BOOK type only");
+                return [this.buildAddressBookConsumer(amqpChannel)];
             default:
                 throw new Error("Invalid type: " + this.config.onlyType + " " +  BatchOperationType.EVENT);
         }
@@ -73,6 +82,10 @@ export class Importer {
 
     private buildContactConsumer(amqpChannel): Observable<ImportingEntity> {
         return this.buildConsumer(amqpChannel, this.config.amqp.queues.contact, this.papiClient.importVCF.bind(this.papiClient));
+    }
+
+    private buildAddressBookConsumer(amqpChannel): Observable<ImportingEntity> {
+        return this.buildConsumer(amqpChannel, this.config.amqp.queues.addressbook, this.papiClient.createAddressBook.bind(this.papiClient));
     }
 
     private buildConsumer(amqpChannel, queue: string, importMethod: ImportMethod): Observable<ImportingEntity> {

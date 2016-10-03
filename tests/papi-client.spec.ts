@@ -1,4 +1,4 @@
-import {ContactMessage, EventMessage} from "../src/models";
+import {AddressBookMessage, ContactMessage, EventMessage} from "../src/models";
 import {PapiClient} from "../src/papi-client";
 import {expect} from "chai";
 import superagent = require("superagent");
@@ -32,6 +32,18 @@ function generateContact(id?: number): ContactMessage {
         AddressBookId: "AddressbookId" + id,
         OriginalContactId: "OriginalContactId" + id,
         MimeContent: "VCF data" + id,
+    };
+}
+
+function generateAddressBook(id?: number): AddressBookMessage {
+    id = id || 1;
+    return {
+        Id: "the id " + id,
+        CreationDate: "2016-07-02T15:11:04",
+        PrimaryAddress: "user@obm.org",
+        AddressBookId: "AddressbookId" + id,
+        AddressBookType: "custom",
+        DisplayName: "a new book",
     };
 }
 
@@ -309,4 +321,38 @@ describe("PapiClient", () => {
 
     });
 
+    describe("createAddressBook function", () => {
+
+        it("should refuse to execute when no batch is started", () => {
+            expect(() => papiClient.createAddressBook(generateAddressBook())).to.throw(Error, "No batch has been started");
+        });
+
+        it("should set the authorization header", done => {
+            expectBatchStart();
+            mock.post("http://obm.org/my-domain/batches/123/addressbooks/user@obm.org", (req) => {
+                expect(req.headers.authorization).to.equal("Basic YWRtaW46cHdk");
+                done();
+            });
+
+            papiClient.startBatch().then(papiClient.createAddressBook.bind(papiClient, generateAddressBook()));
+        });
+
+        it("should send the expected JSON in the body", (done) => {
+            expectBatchStart();
+            mock.post("http://obm.org/my-domain/batches/123/addressbooks/user@obm.org", (req) => {
+                expect(req.body).to.deep.equal({
+                    name: "a new book",
+                    role: "custom",
+                    reference: {
+                        value: "AddressbookId1",
+                        origin: "spews",
+                    },
+                });
+                done();
+            });
+
+            papiClient.startBatch().then(papiClient.createAddressBook.bind(papiClient, generateAddressBook()));
+        });
+
+    });
 });
