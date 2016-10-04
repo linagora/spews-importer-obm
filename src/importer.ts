@@ -1,6 +1,6 @@
 import {batchErrorLogger, logger} from "./logger";
 import {ImportingEntity, ImportMethod} from "./models";
-import {BatchResult, PapiClient} from "./papi-client";
+import {BatchOperationType, BatchResult, PapiClient} from "./papi-client";
 import {URL} from "./types";
 import * as Promise from "bluebird";
 import {Observable} from "rx";
@@ -20,6 +20,7 @@ export interface ImporterConfig {
     maxBatchSize: number;
     maxBatchWaitTimeMs: number;
     delayBetweenBatchMs: number;
+    onlyType?: BatchOperationType;
 }
 
 export class Importer {
@@ -41,13 +42,28 @@ export class Importer {
             ).takeLast(1))
             .flatMap(reply => {
                 reply.channel.prefetch(this.config.maxBatchSize, true);
-                return Observable.merge(
-                    this.buildEventConsumer(reply.channel),
-                    this.buildContactConsumer(reply.channel)
-                );
+                return Observable.merge(this.buildConsumers(reply.channel));
             })
             .bufferWithTimeOrCount(this.config.maxBatchWaitTimeMs, this.config.maxBatchSize)
             .subscribe(entities => this.importInOBM(entities));
+    }
+
+    private buildConsumers(amqpChannel): Observable<ImportingEntity>[] {
+        if (!this.config.onlyType) {
+            logger.info("The import will consume messages of all entity types");
+            return [this.buildEventConsumer(amqpChannel), this.buildContactConsumer(amqpChannel)];
+        }
+
+        switch (this.config.onlyType) {
+            case BatchOperationType.EVENT:
+                logger.info("The import will consume messages of EVENT type only");
+                return [this.buildEventConsumer(amqpChannel)];
+            case BatchOperationType.CONTACT:
+                logger.info("The import will consume messages of CONTACT type only");
+                return [this.buildContactConsumer(amqpChannel)];
+            default:
+                throw new Error("Invalid type: " + this.config.onlyType + " " +  BatchOperationType.EVENT);
+        }
     }
 
     private buildEventConsumer(amqpChannel): Observable<ImportingEntity> {
