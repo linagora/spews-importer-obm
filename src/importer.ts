@@ -20,6 +20,7 @@ export interface ImporterConfig {
     maxBatchSize: number;
     maxBatchWaitTimeMs: number;
     delayBetweenBatchMs: number;
+    checkBatchStatusInterval: number;
     onlyType?: BatchOperationType;
 }
 
@@ -115,7 +116,7 @@ export class Importer {
                 })
                 .then(() => {
                     logger.info("Waiting for batch to finish");
-                    return this.papiClient.waitForBatchSuccess();
+                    return this.papiClient.waitForBatchSuccess(this.config.checkBatchStatusInterval);
                 });
         });
     }

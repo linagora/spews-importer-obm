@@ -24,6 +24,7 @@ export class ImporterConfigFactory {
             maxBatchSize: options.batch_size,
             maxBatchWaitTimeMs: options.batch_wait,
             delayBetweenBatchMs: options.batch_delay,
+            checkBatchStatusInterval: options.batch_check_interval,
             amqp: {
                 host: options.amqp_host,
                 queues: {
