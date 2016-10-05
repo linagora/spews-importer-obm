@@ -9,4 +9,6 @@ RUN npm install && \
 
 RUN grunt compile
 
+RUN rm -rf /code/node_modules/rx-amqplib/src
+
 ENTRYPOINT ["node", "dist/main.js"]
