@@ -97,7 +97,12 @@ export class PapiClient {
         this.assertBatchHasBeenStarted();
 
         return this.promisify(this.requestInBatch(post, "/contacts/" + contact.PrimaryAddress)
-            .query({ trackingRef: contact.Id, trackingDate: contact.CreationDate })
+            .query({
+                trackingRef: contact.Id,
+                trackingDate: contact.CreationDate,
+                addressBookRef: contact.AddressBookId,
+                addressBookRefOrigin: PapiClient.ORIGIN,
+            })
             .type("text/plain")
             .send(contact.MimeContent)
         );

@@ -312,7 +312,12 @@ describe("PapiClient", () => {
             mock.post("http://obm.org/my-domain/batches/123/contacts/user@obm.org", (req) => {
                 expect(req.headers["content-type"]).to.equal("text/plain");
                 expect(req.body).to.equal(contact.MimeContent);
-                expect(req.query).to.deep.equal({ trackingRef: contact.Id, trackingDate: contact.CreationDate });
+                expect(req.query).to.deep.equal({
+                    trackingRef: contact.Id,
+                    trackingDate: contact.CreationDate,
+                    addressBookRef: contact.AddressBookId,
+                    addressBookRefOrigin: "spews",
+                });
                 done();
             });
 
