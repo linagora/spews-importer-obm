@@ -129,7 +129,7 @@ describe("PapiClient", () => {
             papiClient.startBatch()
                 .then(papiClient.waitForBatchSuccess.bind(papiClient))
                 .catch((err) => {
-                    expect(err).to.deep.equal({status: 500});
+                    expect(err.status).to.equal(500);
                     done();
                 });
         });
@@ -265,14 +265,15 @@ describe("PapiClient", () => {
         });
 
         it("should set the ICS data in the body and the text/plain header", (done) => {
+            let event = generateEvent();
             expectBatchStart();
             mock.post("http://obm.org/my-domain/batches/123/events/user@obm.org", (req) => {
                 expect(req.headers["content-type"]).to.equal("text/plain");
-                // expect(req.body).to.equal(event.MimeContent); // superagent-mocker finds an empty body
+                expect(req.body).to.equal(event.MimeContent);
                 done();
             });
 
-            papiClient.startBatch().then(papiClient.importICS.bind(papiClient, generateEvent()));
+            papiClient.startBatch().then(papiClient.importICS.bind(papiClient, event));
         });
 
     });
@@ -294,14 +295,16 @@ describe("PapiClient", () => {
         });
 
         it("should set the VCF data in the body and the text/plain header", (done) => {
+            let contact = generateContact();
             expectBatchStart();
             mock.post("http://obm.org/my-domain/batches/123/contacts/user@obm.org", (req) => {
                 expect(req.headers["content-type"]).to.equal("text/plain");
-                // expect(req.body).to.equal("content"); // superagent-mocker finds an empty body
+                expect(req.body).to.equal(contact.MimeContent);
+                expect(req.query).to.deep.equal({ trackingRef: contact.Id, trackingDate: contact.CreationDate });
                 done();
             });
 
-            papiClient.startBatch().then(papiClient.importVCF.bind(papiClient, generateContact()));
+            papiClient.startBatch().then(papiClient.importVCF.bind(papiClient, contact));
         });
 
     });
