@@ -2,25 +2,30 @@ import {DateString, EmailAddress, ICS, UUID, VCF} from "./types";
 import * as Promise from "bluebird";
 import {Response} from "superagent";
 
-export interface ImportMessage {}
 export type ImportMethod = (ImportMessage) => Promise<Response>;
 
-export interface EventMessage extends ImportMessage {
+export interface ImportMessage {
     Id: UUID;
     CreationDate: DateString;
     PrimaryAddress: EmailAddress;
+}
+
+export interface EventMessage extends ImportMessage {
     CalendarId: string;
     AppointmentId: string;
     MimeContent: ICS;
 }
 
 export interface ContactMessage extends ImportMessage {
-    Id: UUID;
-    CreationDate: DateString;
-    PrimaryAddress: EmailAddress;
     AddressBookId: string;
     OriginalContactId: string;
     MimeContent: VCF;
+}
+
+export interface AddressBookMessage extends ImportMessage {
+    AddressBookId: string;
+    AddressBookType: string;
+    DisplayName: string;
 }
 
 export class ImportingEntity {

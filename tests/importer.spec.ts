@@ -11,9 +11,11 @@ describe("Importer", () => {
     let papiClient: PapiClient;
     let importICSSpy;
     let importVCFSpy;
+    let createAddressBookSpy;
 
     let allEventMessages;
     let allContactMessages;
+    let allAddressBookMessages;
     let amqpConnectionProvider;
     let amqpConnection;
     let amqpChannel;
@@ -39,6 +41,12 @@ describe("Importer", () => {
         return message;
     }
 
+    function buildAddressBookMessage(id) {
+        let message = buildAmqpMessage(id);
+        message.content.toString = () => `{"Id":"the id ${id}","CreationDate":"a date","PrimaryAddress":"an address","AddressBookId":"the book id","AddressBookType":"custom","DisplayName":"the book name"}`;
+        return message;
+    }
+
     beforeEach(() => {
         config = {
             maxBatchSize: 5,
@@ -50,12 +58,14 @@ describe("Importer", () => {
                 queues: {
                     event: "event_queue",
                     contact: "contact_queue",
+                    addressbook: "addressbook_queue",
                 },
             },
         };
 
         allEventMessages = [buildEventMessage(1), buildEventMessage(2)];
         allContactMessages = [];
+        allAddressBookMessages = [];
 
         amqpChannel = {
             assertQueue: sinon.spy(() => Observable.just({channel: amqpChannel})),
@@ -65,6 +75,8 @@ describe("Importer", () => {
                     allEventMessages.forEach(msg => observer.onNext(msg));
                 } else if (queueName === config.amqp.queues.contact) {
                     allContactMessages.forEach(msg => observer.onNext(msg));
+                } else if (queueName === config.amqp.queues.addressbook) {
+                    allAddressBookMessages.forEach(msg => observer.onNext(msg));
                 }
             })),
             sendToQueue: sinon.spy(),
@@ -81,6 +93,7 @@ describe("Importer", () => {
         }));
         papiClient.importICS = importICSSpy = sinon.stub().returns(Promise.resolve(null));
         papiClient.importVCF = importVCFSpy = sinon.stub().returns(Promise.resolve(null));
+        papiClient.createAddressBook = createAddressBookSpy = sinon.stub().returns(Promise.resolve(null));
     });
 
     describe("importAll function", () => {
@@ -116,6 +129,7 @@ describe("Importer", () => {
 
             expect(amqpChannel.consume.withArgs(config.amqp.queues.event, { noAck: false }).calledOnce).to.be.true;
             expect(amqpChannel.consume.withArgs(config.amqp.queues.contact, { noAck: false }).calledOnce).to.be.true;
+            expect(amqpChannel.consume.withArgs(config.amqp.queues.addressbook, { noAck: false }).calledOnce).to.be.true;
         });
 
         it("should start a channel consumer on the only queue related to the config's 'onlyType'", () => {
@@ -124,6 +138,7 @@ describe("Importer", () => {
             new Importer(papiClient, config, amqpConnectionProvider).importAll();
 
             expect(amqpChannel.consume.withArgs(config.amqp.queues.event, { noAck: false }).called).to.be.false;
+            expect(amqpChannel.consume.withArgs(config.amqp.queues.addressbook, { noAck: false }).called).to.be.false;
             expect(amqpChannel.consume.withArgs(config.amqp.queues.contact, { noAck: false }).calledOnce).to.be.true;
         });
 
@@ -131,6 +146,7 @@ describe("Importer", () => {
             config.maxBatchWaitTimeMs = 100;
 
             allContactMessages = [buildContactMessage(3)];
+            allAddressBookMessages = [buildAddressBookMessage(4)];
             let expectedEvent1 = {
                 Id: "the id 1",
                 CreationDate: "a date",
@@ -147,6 +163,14 @@ describe("Importer", () => {
                 AppointmentId: "an appointment",
                 MimeContent: "the mime",
             };
+            let expectedAddressBook = {
+                Id: "the id 4",
+                CreationDate: "a date",
+                PrimaryAddress: "an address",
+                AddressBookId: "the book id",
+                AddressBookType: "custom",
+                DisplayName: "the book name",
+            };
             let expectedContact = {
                 Id: "the id 3",
                 CreationDate: "a date",
@@ -160,6 +184,7 @@ describe("Importer", () => {
                 expect(importICSSpy.withArgs(expectedEvent1).calledOnce).to.be.true;
                 expect(importICSSpy.withArgs(expectedEvent2).calledOnce).to.be.true;
                 expect(importVCFSpy.withArgs(expectedContact).calledOnce).to.be.true;
+                expect(createAddressBookSpy.withArgs(expectedAddressBook).calledOnce).to.be.true;
                 done();
                 return Promise.resolve(null);
             };
@@ -170,11 +195,15 @@ describe("Importer", () => {
         it("should not start any batch on papi if no amqp event message is received", (done) => {
             config.maxBatchWaitTimeMs = 100;
             allEventMessages = [];
-            papiClient.startBatch = () => done("Should not be called");
+
+            let doneAsSuccessTimer = setTimeout(done, config.maxBatchWaitTimeMs + 200);
+            papiClient.startBatch = () => {
+                clearTimeout(doneAsSuccessTimer);
+                done("No batch should have been started");
+                return Promise.resolve(undefined);
+            };
 
             new Importer(papiClient, config, amqpConnectionProvider).importAll();
-
-            setTimeout(done, config.maxBatchWaitTimeMs + 200);
         });
 
         it("should start a batch with less events than 'maxBatchSize' if 'runBatchWaitTime' is over", (done) => {

@@ -25,7 +25,7 @@ program.command("import <papiUrl> <domainUuid>")
     .option("-w, --batch_wait <wait>", "Time to wait (in ms) for new message from the message-queue before making a batch [5000]", arg => parseInt(arg, 10), 5000)
     .option("-d, --batch_delay <delay>", "Minimal time (in ms) to wait between two batches, can be used to avoid PAPI overload [1000]", arg => parseInt(arg, 10), 1000)
     .option("-i, --batch_check_interval <interval>", "Time (in ms) to wait between two checks of the current batch [1000]", arg => parseInt(arg, 10), 1000)
-    .option("-t, --only_type <type>", "Import only one type of entity, possible values are: EVENT, CONTACT. [ALL]")
+    .option("-t, --only_type <type>", "Import only one type of entity, possible values are: EVENT, CONTACT, ADDRESS_BOOK. [ALL]")
     .action((papiUrl, domainUuid, options) => {
         ImporterFactory.create(papiUrl, domainUuid, options).importAll();
     });
