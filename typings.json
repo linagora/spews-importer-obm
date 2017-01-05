@@ -2,7 +2,8 @@
   "name": "spews-importer-obm",
   "dependencies": {
     "bluebird": "registry:npm/bluebird#3.3.4+20160531224558",
-    "sinon": "registry:npm/sinon#1.16.0+20160723033700"
+    "sinon": "registry:npm/sinon#1.16.0+20160723033700",
+    "url-join": "registry:dt/url-join#0.8.3+20161008173327"
   },
   "globalDependencies": {
     "chai": "registry:dt/chai#3.4.0+20160601211834",
