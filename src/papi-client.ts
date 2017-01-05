@@ -2,6 +2,7 @@ import {AddressBookMessage, ContactMessage, EventMessage} from "./models";
 import {URL, UUID} from "./types";
 import * as Promise from "bluebird";
 import {get, post, put, Response, SuperAgentRequest} from "superagent";
+import urljoin = require("url-join");
 
 export type RequestBuilder = (url: string, callback?: (err: any, res: Response) => void) => SuperAgentRequest;
 export type BatchId = number;
@@ -144,7 +145,7 @@ export class PapiClient {
     }
 
     private papiUrl(urlSuffix: string): string {
-        return this.apiUrl + this.domainUUID + urlSuffix;
+        return urljoin(this.apiUrl, this.domainUUID, urlSuffix);
     }
 
     private assertBatchHasBeenStarted() {

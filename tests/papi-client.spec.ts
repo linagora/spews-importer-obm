@@ -59,6 +59,22 @@ describe("PapiClient", () => {
         mock.clearRoutes();
     });
 
+    describe("providing papi url and domain uuid", () => {
+
+        it ("should append a trailing slash if missing", (done) => {
+            papiClient = new PapiClient("https://OBM/v1", "my-domain", {
+                login: "admin",
+                password: "pwd",
+            });
+            mock.post("https://OBM/v1/my-domain/batches/", (req) => {
+                done();
+                return {body: {id: 123}};
+            });
+
+            papiClient.startBatch();
+        });
+    });
+
     describe("startBatch function", () => {
 
         it("should set the authorization header", (done) => {
