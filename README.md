@@ -1,3 +1,5 @@
+![Archived](https://img.shields.io/badge/Current_Status-archived-blue?style=flat)
+
 # spews-importer-obm
 
 Tool to import data to OBM using its provisioning API, requires a OBM version >= 3.2.1.
